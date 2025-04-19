@@ -22,8 +22,9 @@ const Profile = () => {
         type: ''
     })
 
-    const [yourVehicals, setYourVehicals] = useState([]);
-    console.log(yourVehicals)
+    const [yourVehicles, setYourVehicles] = useState([]);
+    console.log(yourVehicles)
+    const [selectedVehicle, setSelectedVehicle] = useState(null);
     const location = useLocation();
     const [showToast, setShowToast] = useState(false);
     const [toastMessage, setToastMessage] = useState('');
@@ -71,28 +72,23 @@ const Profile = () => {
         const fetchVehicle = async () => {
             try {
                 setLoading(true);
-                const response = await axios.get(`/api/get-vehicle`, {
-                    withCredentials: true
-                });
-
-                setYourVehicals(response.data.vehicles);
-                console.log(response.data.vehicles)
-                setLoading(false);
+                const response = await axios.get(`/api/get-vehicle`, { withCredentials: true });
+                setYourVehicles(response.data.vehicles);
+                setSelectedVehicle(response.data.vehicles[0]); // auto-select first one
             } catch (error) {
                 if (!axios.isCancel(error)) {
                     navigate('/profile', {
                         state: {
                             showToast: true,
                             message: 'No vehicles found',
-                            type: 'error'
-                        }
+                            type: 'error',
+                        },
                     });
                 }
             } finally {
                 setLoading(false);
             }
-        }
-
+        };
 
         fetchProfile();
         fetchVehicle();
@@ -145,7 +141,6 @@ const Profile = () => {
             }));
         }
     };
-
 
     const handleProfileUpdate = async (e) => {
         e.preventDefault();
@@ -215,6 +210,50 @@ const Profile = () => {
             });
         }
     };
+
+    const handleVehicleRemove = async () => {
+        if (!selectedVehicle?.id) return;
+
+        try {
+            setLoading(true);
+            const response = await axios.post(
+                '/api/remove-vehicle',
+                { vehicleId: selectedVehicle.id },
+                { withCredentials: true }
+            );
+
+            if (response.status === 200) {
+                const updatedVehicles = response.data.vehicles;
+
+                setYourVehicles(updatedVehicles);
+
+                if (updatedVehicles.length > 0) {
+                    setSelectedVehicle(updatedVehicles[0]);
+                } else {
+                    setSelectedVehicle(null);
+                    navigate('/profile', {
+                        state: {
+                            showToast: true,
+                            message: 'All vehicles removed',
+                            type: 'info',
+                        },
+                    });
+                }
+            }
+        } catch (error) {
+            console.error('Error removing vehicle:', error);
+            navigate('/profile', {
+                state: {
+                    showToast: true,
+                    message: 'Failed to remove vehicle',
+                    type: 'error',
+                },
+            });
+        } finally {
+            setLoading(false);
+        }
+    };
+
 
     const handleLogout = async () => {
         userAuth.getState().logout(userId);
@@ -468,6 +507,34 @@ const Profile = () => {
                                         Upload Vehicle
                                     </button>
 
+                                    <button
+                                        onClick={handleVehicleRemove}
+                                        className="flex bg-white/10 rounded-lg backdrop-blur-sm gap-2 hover:bg-white/20 items-center px-4 py-2 transition-all"
+                                    >
+                                        <svg
+                                            className="h-5 w-5"
+                                            fill="none"
+                                            stroke="currentColor"
+                                            viewBox="0 0 24 24"
+                                            xmlns="http://www.w3.org/2000/svg"
+                                        >
+                                            <path
+                                                strokeLinecap="round"
+                                                strokeLinejoin="round"
+                                                strokeWidth={2}
+                                                d="M5 13l1.5-4.5a2 2 0 011.9-1.5h7.2a2 2 0 011.9 1.5L19 13M4 17h1a1 1 0 001-1v-1h12v1a1 1 0 001 1h1M6 17a1 1 0 11-2 0 1 1 0 012 0zm14 0a1 1 0 11-2 0 1 1 0 012 0z"
+                                            />
+                                            <path
+                                                strokeLinecap="round"
+                                                strokeLinejoin="round"
+                                                strokeWidth={2}
+                                                d="M15 6h6"
+                                            />
+                                        </svg>
+
+                                        Remove Vehicle
+                                    </button>
+
                                 </div>
                             </div>
                             <div className="bg-white/10 p-4 rounded-xl w-full backdrop-blur-sm md:w-auto">
@@ -477,10 +544,32 @@ const Profile = () => {
                                     </svg>
                                     Vehicle Details
                                 </h3>
-                                <div className="space-y-1">
-                                    <p className="font-mono">{profileData.user.vehicle_details.plate_number}</p>
-                                    <p className="text-sm text-white/80">{profileData.user.vehicle_details.vehicle_type}</p>
-                                </div>
+                                {yourVehicles.length > 0 ? (
+                                    <div className="space-y-2">
+                                        <select
+                                            onChange={(e) => {
+                                                const selected = yourVehicles.find(v => v.plate_number === e.target.value);
+                                                setSelectedVehicle(selected);
+                                            }}
+                                            className="bg-white text-black p-2 rounded shadow"
+                                            value={selectedVehicle?.plate_number || ""}
+                                        >
+                                            {yourVehicles.map((vehicle, index) => (
+                                                <option key={index} value={vehicle.plate_number}>
+                                                    {vehicle.plate_number} - {vehicle.vehicle_type}
+                                                </option>
+                                            ))}
+                                        </select>
+
+                                        {selectedVehicle && (
+                                            <div className="space-y-1 mt-4">
+                                                <p className="font-mono">{selectedVehicle.plate_number}</p>
+                                                <p className="text-sm text-white/80">{selectedVehicle.vehicle_type}</p>
+                                            </div>
+                                        )}
+                                    </div>
+                                ) : <p className="text-center text-xl">No vehicle found!</p>}
+
                             </div>
                         </div>
                     </div>}
