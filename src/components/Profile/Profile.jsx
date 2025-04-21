@@ -10,7 +10,7 @@ import Toast from '../Toast.jsx'
 const Profile = () => {
     const navigate = useNavigate();
     const userId = userAuth(state => state.user);
-    const { fromGoogle } = userAuth(state => state.user);
+    const fromGoogle = userAuth(state => state.user?.fromGoogle || false);
     const [user, setUser] = useState(null);
     const [loading, setLoading] = useState(false);
     const [showUpdateModal, setShowUpdateModal] = useState(false);
@@ -22,8 +22,7 @@ const Profile = () => {
         type: ''
     })
 
-    const [yourVehicles, setYourVehicles] = useState([]);
-    console.log(yourVehicles)
+    const [yourVehicles, setYourVehicles] = useState([])
     const [selectedVehicle, setSelectedVehicle] = useState(null);
     const location = useLocation();
     const [showToast, setShowToast] = useState(false);
@@ -94,6 +93,23 @@ const Profile = () => {
         fetchVehicle();
     }, []);
 
+    useEffect(() => {
+        if (location.state?.showToast) {
+            setShowToast(true);
+            setToastMessage(location.state.message);
+            setToastType(location.state.type);
+
+            window.history.replaceState({}, document.title);
+        }
+    }, [location.state]);
+
+    useEffect(() => {
+        if (showToast) {
+            const timer = setTimeout(() => setShowToast(false), 3000);
+            return () => clearTimeout(timer);
+        }
+    }, [showToast]);    
+
     const handleUploadVehical = async (e) => {
         e.preventDefault();
         try {
@@ -101,30 +117,25 @@ const Profile = () => {
                 plate_number: vehical.plate_number,
                 type: vehical.type,
             }, { withCredentials: true });
-
+    
             if (res.data.success) {
-                navigate('/profile', {
-                    replace: true,
-                    state: {
-                        showToast: true,
-                        message: 'Vehicle successfully saved!',
-                        type: 'success'
-                    }
-                });
+                setYourVehicles(prev => [...prev, { plate_number: vehical.plate_number, type: vehical.type }]);
+                setVehical({ plate_number: '', type: '' });
+                setUploadVehicalModel(false);
+    
+                setShowToast(true);
+                setToastMessage('Vehicle successfully saved!');
+                setToastType('success');
             }
-
+    
         } catch (error) {
-            console.log(error)
-            navigate('/profile', {
-                replace: true,
-                state: {
-                    showToast: true,
-                    message: 'Vehicle not saved!',
-                    type: 'error'
-                }
-            });
+            console.error(error);
+            setShowToast(true);
+            setToastMessage('Vehicle not saved!');
+            setToastType('error');
         }
-    }
+    };    
+
 
     const handleInputChange = (e) => {
         const { name, value } = e.target;
@@ -212,23 +223,29 @@ const Profile = () => {
     };
 
     const handleVehicleRemove = async () => {
-        if (!selectedVehicle?.id) return;
+        if (!selectedVehicle?.plate_number) return;
 
         try {
             setLoading(true);
             const response = await axios.post(
                 '/api/remove-vehicle',
-                { vehicleId: selectedVehicle.id },
+                { plate_number: selectedVehicle.plate_number },
                 { withCredentials: true }
             );
 
             if (response.status === 200) {
                 const updatedVehicles = response.data.vehicles;
-
                 setYourVehicles(updatedVehicles);
 
                 if (updatedVehicles.length > 0) {
                     setSelectedVehicle(updatedVehicles[0]);
+                    navigate('/profile', {
+                        state: {
+                            showToast: true,
+                            message: `Vehicle ${selectedVehicle.plate_number} removed`,
+                            type: 'info',
+                        },
+                    });
                 } else {
                     setSelectedVehicle(null);
                     navigate('/profile', {
@@ -253,6 +270,7 @@ const Profile = () => {
             setLoading(false);
         }
     };
+
 
 
     const handleLogout = async () => {
@@ -384,7 +402,7 @@ const Profile = () => {
                 </motion.div>
             )}
 
-            {showForgotPasswordModal && (
+            {showForgotPasswordModal && fromGoogle &&(
                 <motion.div
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
@@ -477,7 +495,8 @@ const Profile = () => {
                                         </svg>
                                         Edit Profile
                                     </button>
-                                    {!fromGoogle ? <button
+                                    {!fromGoogle && (
+                                        <button
                                         onClick={() => setShowForgotPasswordModal(true)}
                                         className="flex bg-white/10 rounded-lg backdrop-blur-sm gap-2 hover:bg-white/20 items-center px-4 py-2 transition-all"
                                     >
@@ -485,7 +504,8 @@ const Profile = () => {
                                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
                                         </svg>
                                         Change Password
-                                    </button> : ''}
+                                    </button>
+                                    )}
                                     <button
                                         onClick={handleLogout}
                                         className="flex bg-white/10 rounded-lg backdrop-blur-sm gap-2 hover:bg-white/20 items-center px-4 py-2 transition-all"
@@ -507,33 +527,35 @@ const Profile = () => {
                                         Upload Vehicle
                                     </button>
 
-                                    <button
-                                        onClick={handleVehicleRemove}
-                                        className="flex bg-white/10 rounded-lg backdrop-blur-sm gap-2 hover:bg-white/20 items-center px-4 py-2 transition-all"
-                                    >
-                                        <svg
-                                            className="h-5 w-5"
-                                            fill="none"
-                                            stroke="currentColor"
-                                            viewBox="0 0 24 24"
-                                            xmlns="http://www.w3.org/2000/svg"
+                                    {yourVehicles.length > 0 && (
+                                        <button
+                                            onClick={handleVehicleRemove}
+                                            className="flex bg-white/10 rounded-lg backdrop-blur-sm gap-2 hover:bg-white/20 items-center px-4 py-2 transition-all"
                                         >
-                                            <path
-                                                strokeLinecap="round"
-                                                strokeLinejoin="round"
-                                                strokeWidth={2}
-                                                d="M5 13l1.5-4.5a2 2 0 011.9-1.5h7.2a2 2 0 011.9 1.5L19 13M4 17h1a1 1 0 001-1v-1h12v1a1 1 0 001 1h1M6 17a1 1 0 11-2 0 1 1 0 012 0zm14 0a1 1 0 11-2 0 1 1 0 012 0z"
-                                            />
-                                            <path
-                                                strokeLinecap="round"
-                                                strokeLinejoin="round"
-                                                strokeWidth={2}
-                                                d="M15 6h6"
-                                            />
-                                        </svg>
+                                            <svg
+                                                className="h-5 w-5"
+                                                fill="none"
+                                                stroke="currentColor"
+                                                viewBox="0 0 24 24"
+                                                xmlns="http://www.w3.org/2000/svg"
+                                            >
+                                                <path
+                                                    strokeLinecap="round"
+                                                    strokeLinejoin="round"
+                                                    strokeWidth={2}
+                                                    d="M5 13l1.5-4.5a2 2 0 011.9-1.5h7.2a2 2 0 011.9 1.5L19 13M4 17h1a1 1 0 001-1v-1h12v1a1 1 0 001 1h1M6 17a1 1 0 11-2 0 1 1 0 012 0zm14 0a1 1 0 11-2 0 1 1 0 012 0z"
+                                                />
+                                                <path
+                                                    strokeLinecap="round"
+                                                    strokeLinejoin="round"
+                                                    strokeWidth={2}
+                                                    d="M15 6h6"
+                                                />
+                                            </svg>
 
-                                        Remove Vehicle
-                                    </button>
+                                            Remove Vehicle
+                                        </button>
+                                    )}
 
                                 </div>
                             </div>
@@ -551,12 +573,19 @@ const Profile = () => {
                                                 const selected = yourVehicles.find(v => v.plate_number === e.target.value);
                                                 setSelectedVehicle(selected);
                                             }}
-                                            className="bg-white text-black p-2 rounded shadow"
+                                            className="w-full px-4 py-3 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all duration-200 ease-in-out font-medium text-gray-700 bg-white hover:bg-gray-50 cursor-pointer"
                                             value={selectedVehicle?.plate_number || ""}
                                         >
-                                            {yourVehicles.map((vehicle, index) => (
-                                                <option key={index} value={vehicle.plate_number}>
-                                                    {vehicle.plate_number} - {vehicle.vehicle_type}
+                                            <option disabled value="" className="text-gray-400">
+                                                Select vehicle
+                                            </option>
+                                            {yourVehicles.map((vehicle) => (
+                                                <option
+                                                    key={vehicle.plate_number}
+                                                    value={vehicle.plate_number}
+                                                    className="text-gray-700 hover:bg-blue-50"
+                                                >
+                                                    {vehicle.plate_number}
                                                 </option>
                                             ))}
                                         </select>
@@ -564,7 +593,7 @@ const Profile = () => {
                                         {selectedVehicle && (
                                             <div className="space-y-1 mt-4">
                                                 <p className="font-mono">{selectedVehicle.plate_number}</p>
-                                                <p className="text-sm text-white/80">{selectedVehicle.vehicle_type}</p>
+                                                <p className="text-sm text-white/80">{selectedVehicle.type}</p>
                                             </div>
                                         )}
                                     </div>

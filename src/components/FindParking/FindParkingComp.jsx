@@ -1,12 +1,71 @@
+import { useEffect, useState } from "react";
+import { debounce } from "lodash";
 import { motion } from "framer-motion";
 import { MapPin, Clock, Calendar } from "react-feather";
 import { parkingSpots } from "../../constants/constans.js";
+import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
+import L from 'leaflet';
+
+
+const markerIcon = new L.Icon({
+    iconUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
+    iconSize: [25, 41],
+    iconAnchor: [12, 41],
+});
 
 const FindParkingComp = () => {
 
-    const handleMap = () => {
-        window.location.href = 'https://www.google.co.in/maps/@26.8105588,75.7328596,13z?entry=ttu&g_ep=EgoyMDI1MDMwMi4wIKXMDSoASAFQAw%3D%3D'
-    }
+    const [coords, setCoords] = useState(null);
+    const [searchInput, setSearchInput] = useState("");
+    const [mapCenter, setMapCenter] = useState(null);
+
+    // Get current location on mount
+    useEffect(() => {
+        navigator.geolocation.getCurrentPosition(
+            (position) => {
+                const { latitude, longitude } = position.coords;
+                setCoords({ lat: latitude, lng: longitude });
+                setMapCenter({ lat: latitude, lng: longitude }); // Set map center as current location
+            },
+            (err) => {
+                console.error("Location error:", err);
+            },
+            { enableHighAccuracy: true }
+        );
+    }, []);
+
+    // Fetch coordinates for searched location
+    const fetchCoordinates = async (location) => {
+        try {
+            const res = await fetch(
+                `https://nominatim.openstreetmap.org/search?format=json&q=${location}`
+            );
+            const data = await res.json();
+            if (data.length > 0) {
+                const { lat, lon } = data[0];
+                setCoords({ lat: parseFloat(lat), lng: parseFloat(lon) });
+                setMapCenter({ lat: parseFloat(lat), lng: parseFloat(lon) }); // Set map center to search result
+            }
+        } catch (err) {
+            console.error("Geocoding error:", err);
+        }
+    };
+
+    // Debounced search for location
+    const debouncedSearch = debounce((value) => {
+        if (value.trim().length > 2) {
+            fetchCoordinates(value);
+        }
+    }, 800);
+
+    useEffect(() => {
+        debouncedSearch(searchInput);
+
+        return () => {
+            debouncedSearch.cancel();
+        };
+    }, [searchInput]);
+
 
     return (
         <div className="min-h-screen bg-gray-50">
@@ -22,37 +81,47 @@ const FindParkingComp = () => {
                             Find Your Perfect Parking Spot
                         </h1>
 
-                        <div className="max-w-3xl mx-auto bg-white rounded-2xl p-6 shadow-2xl">
-                            <div className="grid md:grid-cols-4 gap-4">
-                                <div className="col-span-2">
+                        <div className="max-w-4xl mx-auto bg-white rounded-2xl p-6 shadow-2xl">
+                            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+
+                                {/* Location input */}
+                                <div className="col-span-1 md:col-span-2">
                                     <div className="flex items-center space-x-2">
                                         <MapPin className="text-gray-400" />
                                         <input
                                             type="text"
                                             placeholder="Enter location..."
+                                            value={searchInput}
+                                            onChange={(e) => setSearchInput(e.target.value)}
                                             className="w-full p-3 border-0 text-gray-900 focus:ring-0"
                                         />
                                     </div>
                                 </div>
 
-                                <div className="flex items-center space-x-2">
-                                    <Calendar className="text-gray-400" />
+                                {/* Date picker */}
+                                <div className="col-span-1 flex items-center">
                                     <input
-                                        type="datetime-local"
+                                        type="date"
                                         className="w-full p-3 border-0 text-gray-900 focus:ring-0"
                                     />
                                 </div>
 
-                                <div className="flex items-center space-x-2">
-                                    <Clock className="text-gray-400" />
-                                    <select className="w-full p-3 border-0 text-gray-900 focus:ring-0">
+                                {/* Time picker + duration */}
+                                <div className="col-span-1 flex flex-col sm:flex-row sm:items-center gap-2">
+                                    <input
+                                        type="time"
+                                        className="w-full p-3 border-0 text-gray-900 focus:ring-0 bg-transparent"
+                                    />
+                                    <select className="w-full p-3 border-0 text-gray-900 focus:ring-0 bg-white">
                                         <option>2 hours</option>
                                         <option>4 hours</option>
                                         <option>All day</option>
                                     </select>
                                 </div>
+
                             </div>
                         </div>
+
                     </motion.div>
                 </div>
             </section>
@@ -117,8 +186,27 @@ const FindParkingComp = () => {
                             className="bg-gray-200 h-96 rounded-2xl shadow-lg mb-8 relative"
                         >
                             <div className="absolute inset-0 bg-gradient-to-b from-transparent to-black/30 rounded-2xl" />
-                            <img src="/assets/Images/map.png" alt="" className="object-cover h-full cursor-pointer" onClick={handleMap} />
-                            <div className="absolute bottom-4 left-4 bg-white p-4 rounded-xl shadow">
+
+                            {coords ? (
+                                <MapContainer
+                                    center={[mapCenter?.lat || coords?.lat, mapCenter?.lng || coords?.lng]} // Use mapCenter to control the center
+                                    zoom={14}
+                                    scrollWheelZoom={true}
+                                    style={{ height: "100%", width: "100%", borderRadius: "1rem", zIndex: 0 }}
+                                >
+                                    <TileLayer
+                                        attribution='&copy; <a href="https://www.openstreetmap.org/">OpenStreetMap</a>'
+                                        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                                    />
+                                    <Marker position={[coords.lat, coords.lng]} icon={markerIcon}>
+                                        <Popup>Your Location</Popup>
+                                    </Marker>
+                                </MapContainer>
+                            ) : (
+                                <img src="/assets/Images/map.png" alt="Map" />
+                            )}
+
+                            <div className="absolute bottom-4 left-4 bg-white p-4 rounded-xl shadow z-10">
                                 <h4 className="font-semibold mb-2">Current Area</h4>
                                 <p className="text-sm text-gray-600">Downtown District</p>
                             </div>

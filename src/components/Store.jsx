@@ -14,7 +14,7 @@ export const userAuth = create((set) => ({
 
             if (response.ok) {
                 const data = await response.json();
-                set({ user: data?.user?.id, loading: false });
+                set({ user: data?.user, loading: false });
             } else {
                 set({ user: null, loading: false });
             }
